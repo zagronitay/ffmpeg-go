@@ -30,7 +30,22 @@ func Input(filename string, kwargs ...KwArgs) *Stream {
 		}
 		args["format"] = fmt
 	}
-	return NewInputNode("input", nil, args).Stream("", "")
+	label := Label("")
+	if l := args.PopString("label"); l != "" {
+		label = Label(l)
+	}
+	return NewInputNode("input", nil, args).Stream(label, "")
+}
+
+func ColorInput(color string, kwargs ...KwArgs) *Stream {
+	filename := "color=" + color
+	args := MergeKwArgs(kwargs)
+	args["format"] = "lavfi"
+	return Input(filename, args)
+}
+
+func NullInput(kwargs ...KwArgs) *Stream {
+	return ColorInput("black@0.0,format=rgba", kwargs...)
 }
 
 // Add extra global command-line argument(s), e.g. ``-progress``.
@@ -97,7 +112,17 @@ func (s *Stream) Output(fileName string, kwargs ...KwArgs) *Stream {
 	if strings.HasPrefix(fileName, "s3://") {
 		return s.outputS3Stream(fileName, kwargs...)
 	}
+	if strings.HasPrefix(fileName, "pipe:") {
+		return s.pipeOutput(kwargs...)
+	}
 	return Output([]*Stream{s}, fileName, kwargs...)
+}
+
+func (s *Stream) pipeOutput(kwargs ...KwArgs) *Stream {
+	args := MergeKwArgs(kwargs)
+	args["format"] = "mpegts"
+	o := Output([]*Stream{s}, "pipe:1", args)
+	return o
 }
 
 func (s *Stream) outputS3Stream(fileName string, kwargs ...KwArgs) *Stream {

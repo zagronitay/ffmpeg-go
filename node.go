@@ -236,6 +236,13 @@ func (n *Node) IncomingEdgeMap() map[Label]NodeInfo {
 	return n.__getIncomingEdgeMap()
 }
 
+func (n *Node) AddKwArgs(k KwArgs) *Node {
+	for kw, v := range k {
+		n.kwargs[kw] = v
+	}
+	return n
+}
+
 func (n *Node) GetInComingEdges() []DagEdge {
 	return GetInComingEdges(n, n.IncomingEdgeMap())
 }

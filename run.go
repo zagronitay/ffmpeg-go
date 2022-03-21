@@ -3,6 +3,7 @@ package ffmpeg_go
 import (
 	"context"
 	"fmt"
+	cmdchain "github.com/rainu/go-command-chain"
 	"io"
 	"log"
 	"os"
@@ -35,6 +36,11 @@ func getInputArgs(node *Node) []string {
 
 func formatInputStreamName(streamNameMap map[string]string, edge DagEdge, finalArg bool) string {
 	prefix := streamNameMap[fmt.Sprintf("%d%s", edge.UpStreamNode.Hash(), edge.UpStreamLabel)]
+
+	if prefix == "" {
+		prefix = streamNameMap[fmt.Sprintf("%d", edge.UpStreamNode.Hash())]
+	}
+
 	suffix := ""
 	format := "[%s%s]"
 	if edge.UpStreamSelector != "" {
@@ -200,6 +206,47 @@ func (s *Stream) GetArgs() []string {
 	return args
 }
 
+func (s *Stream) FrameDuration() int {
+	nodes := getStreamSpecNodes([]*Stream{s})
+	var dagNodes []DagNode
+	for i := range nodes {
+		dagNodes = append(dagNodes, nodes[i])
+	}
+	sorted, _, err := TopSort(dagNodes)
+	if err != nil {
+		panic(err)
+	}
+	totalDuration := 0
+	for _, n := range sorted {
+		n := n.(*Node)
+		if n.nodeType == "InputNode" {
+			if n.kwargs["_nb_frames"] != nil {
+				totalDuration += n.kwargs["_nb_frames"].(int)
+			}
+		}
+	}
+	return totalDuration
+}
+
+func (s *Stream) TraversAndFindFromIncoming(name string) *Node {
+	nodes := getStreamSpecNodes([]*Stream{s})
+	var dagNodes []DagNode
+	for i := range nodes {
+		dagNodes = append(dagNodes, nodes[i])
+	}
+	sorted, _, err := TopSort(dagNodes)
+	if err != nil {
+		panic(err)
+	}
+	for _, n := range sorted {
+		n := n.(*Node)
+		if n.name == name {
+			return n
+		}
+	}
+	return nil
+}
+
 func (s *Stream) WithTimeout(timeOut time.Duration) *Stream {
 	if timeOut > 0 {
 		s.Context, _ = context.WithTimeout(s.Context, timeOut)
@@ -236,7 +283,19 @@ func (s *Stream) ErrorToStdOut() *Stream {
 	return s.WithErrorOutput(os.Stdout)
 }
 
-// for test
+func (s *Stream) AddTimestamp() *Stream {
+	timestamp := NullInput(KwArgs{
+		"label": "debug-timestamp-overlay",
+	}).Scale(1280, 720).Drawtext("%{pts\\:hms}", 0, 0, false, KwArgs{
+		"box":      "1",
+		"x":        "(w-tw)/2",
+		"y":        "h-(2*lh)",
+		"fontsize": "40",
+	})
+
+	return s.Overlay(timestamp, "pass")
+}
+
 func (s *Stream) Compile() *exec.Cmd {
 	args := s.GetArgs()
 	cmd := exec.CommandContext(s.Context, "ffmpeg", args...)
@@ -265,4 +324,19 @@ func (s *Stream) Run() error {
 		}()
 	}
 	return s.Compile().Run()
+}
+
+func (s *Stream) Play() error {
+	if err := cmdchain.Builder().
+		JoinCmd(s.Compile()).
+		Join("ffplay", "-").
+		Finalize().WithError(os.Stderr).Run(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Stream) PrintCommands() error {
+	s.Compile()
+	return nil
 }

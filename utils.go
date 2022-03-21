@@ -192,6 +192,11 @@ func ConvertKwargsToCmdLineArgs(kwargs KwArgs) []string {
 
 	for _, k := range keys {
 		v := kwargs[k]
+
+		if k == "_nb_frames" {
+			continue
+		}
+
 		switch a := v.(type) {
 		case string:
 			args = append(args, fmt.Sprintf("-%s", k))

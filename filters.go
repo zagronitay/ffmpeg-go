@@ -16,7 +16,12 @@ func FilterMultiOutput(streamSpec []*Stream, filterName string, args Args, kwArg
 }
 
 func Filter(streamSpec []*Stream, filterName string, args Args, kwArgs ...KwArgs) *Stream {
-	return FilterMultiOutput(streamSpec, filterName, args, MergeKwArgs(kwArgs)).Stream("", "")
+	kw := MergeKwArgs(kwArgs)
+	label := Label("")
+	if l := kw.PopString("label"); l != "" {
+		label = Label(l)
+	}
+	return FilterMultiOutput(streamSpec, filterName, args, kw).Stream(label, "")
 }
 
 func (s *Stream) Filter(filterName string, args Args, kwArgs ...KwArgs) *Stream {
@@ -34,9 +39,14 @@ func (s *Stream) ASplit() *Node {
 	return NewFilterNode("asplit", []*Stream{s}, 1, nil, nil)
 }
 
-func (s *Stream) SetPts(expr string) *Node {
+func (s *Stream) SetPts(expr string) *Stream {
 	AssertType(s.Type, "FilterableStream", "setpts")
-	return NewFilterNode("setpts", []*Stream{s}, 1, []string{expr}, nil)
+	return NewFilterNode("setpts", []*Stream{s}, 1, []string{expr}, nil).Stream("", "")
+}
+
+func (s *Stream) SetTB() *Stream {
+	AssertType(s.Type, "FilterableStream", "settb")
+	return NewFilterNode("settb", []*Stream{s}, 1, []string{"AVTB"}, nil).Stream("", "")
 }
 
 func (s *Stream) Trim(kwargs ...KwArgs) *Stream {
@@ -99,7 +109,11 @@ func (s *Stream) Drawtext(text string, x, y int, escape bool, kwargs ...KwArgs) 
 		args["y"] = y
 	}
 
-	return NewFilterNode("drawtext", []*Stream{s}, 1, nil, args).Stream("", "")
+	label := Label("")
+	if l := args.PopString("label"); l != "" {
+		label = Label(l)
+	}
+	return NewFilterNode("drawtext", []*Stream{s}, 1, nil, args).Stream(label, "")
 }
 
 func Concat(streams []*Stream, kwargs ...KwArgs) *Stream {
@@ -127,6 +141,80 @@ func (s *Stream) Hue(kwargs ...KwArgs) *Stream {
 	AssertType(s.Type, "FilterableStream", "hue")
 	return NewFilterNode("hue", []*Stream{s}, 1, nil, MergeKwArgs(kwargs)).Stream("", "")
 }
+
+func (s *Stream) XFade(n *Stream, duration, offset float64, transition string, kwargs ...KwArgs) *Stream {
+	AssertType(s.Type, "FilterableStream", "xfade")
+	k := MergeKwArgs(kwargs)
+	k["duration"] = duration
+	k["offset"] = offset
+	if transition != "" {
+		k["transition"] = transition
+	}
+	return NewFilterNode("xfade", []*Stream{s, n}, 2, nil, k).Stream("", "")
+}
+
+func (s *Stream) Scale(w, h int, kwargs ...KwArgs) *Stream {
+	AssertType(s.Type, "FilterableStream", "scale")
+	k := MergeKwArgs(kwargs)
+	k["w"] = w
+	k["h"] = h
+
+	label := Label("")
+	if l := k.PopString("label"); l != "" {
+		label = Label(l)
+	}
+
+	return NewFilterNode("scale", []*Stream{s}, 1, nil, k).Stream(label, "")
+}
+
+func (s *Stream) AspectRatio(args Args, kwargs ...KwArgs) *Stream {
+	AssertType(s.Type, "FilterableStream", "setdar")
+	k := MergeKwArgs(kwargs)
+
+	label := Label("")
+	if l := k.PopString("label"); l != "" {
+		label = Label(l)
+	}
+
+	return NewFilterNode("setdar", []*Stream{s}, 1, args, k).Stream(label, "")
+}
+
+func (s *Stream) FadeIn(sf, n int, kwargs ...KwArgs) *Stream {
+	k := MergeKwArgs(kwargs)
+	k["type"] = "in"
+	k["start_frame"] = sf
+	k["nb_frames"] = n
+	return NewFilterNode("fade", []*Stream{s}, 1, nil, k).Stream(Label(fmt.Sprintf("fadeIn-%s", s.Label)), "")
+}
+
+func (s *Stream) FadeOut(sf, n int, kwargs ...KwArgs) *Stream {
+	k := MergeKwArgs(kwargs)
+	k["type"] = "out"
+	k["start_frame"] = sf
+	k["nb_frames"] = n
+
+	return NewFilterNode("fade", []*Stream{s}, 1, nil, k).Stream(Label(fmt.Sprintf("fadeOut-%s", s.Label)), "")
+}
+
+//func (s *Stream) AudioFadeIn(kwargs ...KwArgs) *Stream {
+//	k := MergeKwArgs(kwargs)
+//	k["type"] = "in"
+//	return NewFilterNode("afade", []*Stream{s}, 1, nil, k).Stream("", "")
+//}
+//
+//func (s *Stream) AudioFadeOut(kwargs ...KwArgs) *Stream {
+//	k := MergeKwArgs(kwargs)
+//	k["type"] = "out"
+//	return NewFilterNode("afade", []*Stream{s}, 1, nil, k).Stream("", "")
+//}
+//
+//func (s *Stream) WithAudio(audioPath string, kwargs ...KwArgs) *Stream {
+//	k := MergeKwArgs(kwargs)
+//	k["v"] = 1
+//	k["a"] = 1
+//	k["unsafe"] = 1
+//	return Concat([]*Stream{s, Input(audioPath)}, k)
+//}
 
 // todo fix this
 func (s *Stream) ColorChannelMixer(kwargs ...KwArgs) *Stream {
